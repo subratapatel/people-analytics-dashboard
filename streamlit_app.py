@@ -1,14 +1,18 @@
 import streamlit as st
 import requests
-import pandas as pd
-import altair as alt
+import plotly.graph_objects as go
 
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-WEBHOOK_URL = "https://n8n.umirai.ai/webhook/people-analytics"
+N8N_WEBHOOK_URL = "https://n8n.umirai.ai/webhook/people-analytics"
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
     page_title="People Analytics Dashboard",
@@ -18,23 +22,92 @@ st.set_page_config(
 
 
 # ============================================================
-# PAGE HEADER
+# CUSTOM CSS
 # ============================================================
 
-st.title("People Analytics Dashboard")
-st.caption("Workforce insights powered by your People Analytics workflow")
+st.markdown(
+    """
+    <style>
+
+    /* Main page */
+    .main {
+        padding-top: 2rem;
+    }
+
+    /* Title */
+    .dashboard-title {
+        font-size: 42px;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    /* Subtitle */
+    .dashboard-subtitle {
+        font-size: 16px;
+        color: #9ca3af;
+        margin-bottom: 28px;
+    }
+
+    /* Section heading */
+    .section-title {
+        font-size: 28px;
+        font-weight: 650;
+        margin-top: 28px;
+        margin-bottom: 15px;
+    }
+
+    /* Analysis text */
+    .analysis-text {
+        font-size: 17px;
+        line-height: 1.7;
+        margin-bottom: 25px;
+    }
+
+    /* Error box */
+    .error-box {
+        padding: 15px;
+        border-radius: 8px;
+        background-color: #3b1f23;
+        color: #ff6b6b;
+        margin-top: 15px;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # ============================================================
-# USER QUESTION
+# HEADER
 # ============================================================
+
+st.markdown(
+    '<div class="dashboard-title">People Analytics Dashboard</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="dashboard-subtitle">'
+    'Workforce insights powered by your People Analytics workflow'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# QUESTION INPUT
+# ============================================================
+
+st.markdown(
+    "**Ask a People Analytics question**"
+)
 
 question = st.text_input(
-    "Ask a People Analytics question",
-    placeholder=(
-        "Example: Compare new joiners and exits between "
-        "FY 2023-24 and FY 2025-26."
-    )
+    label="",
+    value="Compare new joiners and exits between FY 2023-24 and FY 2025-26.",
+    placeholder="Ask a People Analytics question...",
+    label_visibility="collapsed"
 )
 
 
@@ -42,631 +115,468 @@ question = st.text_input(
 # ANALYZE BUTTON
 # ============================================================
 
-if st.button("Analyze", type="primary"):
+analyze = st.button(
+    "Analyze",
+    type="primary"
+)
+
+
+# ============================================================
+# FUNCTION — CALL N8N
+# ============================================================
+
+def call_n8n(user_question):
+
+    payload = {
+        "user_question": user_question
+    }
+
+    try:
+
+        response = requests.post(
+            N8N_WEBHOOK_URL,
+            json=payload,
+            timeout=120
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+
+        st.error(
+            f"Unable to connect to the analytics workflow: {e}"
+        )
+
+        return None
+
+    except ValueError:
+
+        st.error(
+            "The analytics workflow returned an invalid JSON response."
+        )
+
+        return None
+
+
+# ============================================================
+# FUNCTION — CREATE BAR CHART
+# ============================================================
+
+def create_bar_chart(chart_data):
+
+    labels = chart_data.get("chart_labels", [])
+    datasets = chart_data.get("chart_datasets", [])
+
+    if not labels:
+        return None
+
+    if not datasets:
+        return None
+
+    fig = go.Figure()
+
+    # --------------------------------------------------------
+    # ADD EACH DATASET AS A SEPARATE BAR SERIES
+    # --------------------------------------------------------
+
+    for dataset in datasets:
+
+        label = dataset.get("label", "Series")
+
+        values = dataset.get("data", [])
+
+        # Make sure values match number of labels
+        if len(values) < len(labels):
+            values = values + [0] * (len(labels) - len(values))
+
+        if len(values) > len(labels):
+            values = values[:len(labels)]
+
+        fig.add_trace(
+            go.Bar(
+                name=label,
+
+                x=labels,
+
+                y=values,
+
+                # Display numbers above bars
+                text=values,
+
+                textposition="outside",
+
+                # IMPORTANT:
+                # White numbers for dark dashboard
+                textfont=dict(
+                    color="white",
+                    size=14
+                ),
+
+                # Controlled bar width
+                width=0.30,
+
+                # Prevent text from being clipped
+                cliponaxis=False,
+
+                hovertemplate=(
+                    "<b>%{x}</b>"
+                    "<br>"
+                    + label
+                    + ": %{y}"
+                    + "<extra></extra>"
+                )
+            )
+        )
+
+    # --------------------------------------------------------
+    # CHART TITLE
+    # --------------------------------------------------------
+
+    chart_title = chart_data.get(
+        "chart_title",
+        "People Analytics"
+    )
+
+    # --------------------------------------------------------
+    # LAYOUT
+    # --------------------------------------------------------
+
+    fig.update_layout(
+
+        title=dict(
+            text=chart_title,
+            font=dict(
+                size=22,
+                color="white"
+            ),
+            x=0,
+            xanchor="left"
+        ),
+
+        # THIS IS CRITICAL
+        # It puts New Joiners and Exits SIDE BY SIDE
+        barmode="group",
+
+        # Dark theme
+        template="plotly_dark",
+
+        # Chart height
+        height=520,
+
+        # Spacing
+        margin=dict(
+            l=70,
+            r=30,
+            t=90,
+            b=110
+        ),
+
+        # Space between FY groups
+        bargap=0.40,
+
+        # Small gap between New Joiners and Exits
+        bargroupgap=0.08,
+
+        # Legend
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.25,
+            xanchor="center",
+            x=0.5,
+            font=dict(
+                color="white",
+                size=13
+            )
+        ),
+
+        # Global font
+        font=dict(
+            color="white"
+        )
+    )
+
+    # --------------------------------------------------------
+    # X AXIS
+    # --------------------------------------------------------
+
+    fig.update_xaxes(
+
+        title_text="Financial Year",
+
+        type="category",
+
+        categoryorder="array",
+
+        categoryarray=labels,
+
+        tickmode="array",
+
+        tickvals=labels,
+
+        ticktext=labels,
+
+        tickfont=dict(
+            color="white",
+            size=13
+        ),
+
+        title_font=dict(
+            color="white",
+            size=14
+        ),
+
+        showgrid=False
+    )
+
+    # --------------------------------------------------------
+    # Y AXIS
+    # --------------------------------------------------------
+
+    fig.update_yaxes(
+
+        title_text="Employee Count",
+
+        rangemode="tozero",
+
+        tickfont=dict(
+            color="white",
+            size=12
+        ),
+
+        title_font=dict(
+            color="white",
+            size=14
+        ),
+
+        gridcolor="rgba(255,255,255,0.15)",
+
+        zeroline=True,
+
+        zerolinecolor="rgba(255,255,255,0.25)"
+    )
+
+    return fig
+
+
+# ============================================================
+# FUNCTION — CREATE LINE CHART
+# ============================================================
+
+def create_line_chart(chart_data):
+
+    labels = chart_data.get("chart_labels", [])
+    datasets = chart_data.get("chart_datasets", [])
+
+    if not labels or not datasets:
+        return None
+
+    fig = go.Figure()
+
+    for dataset in datasets:
+
+        label = dataset.get("label", "Series")
+
+        values = dataset.get("data", [])
+
+        fig.add_trace(
+            go.Scatter(
+
+                name=label,
+
+                x=labels,
+
+                y=values,
+
+                mode="lines+markers+text",
+
+                text=values,
+
+                textposition="top center",
+
+                textfont=dict(
+                    color="white",
+                    size=13
+                ),
+
+                hovertemplate=(
+                    "<b>%{x}</b>"
+                    "<br>"
+                    + label
+                    + ": %{y}"
+                    + "<extra></extra>"
+                )
+            )
+        )
+
+    chart_title = chart_data.get(
+        "chart_title",
+        "People Analytics"
+    )
+
+    fig.update_layout(
+
+        title=dict(
+            text=chart_title,
+            font=dict(
+                size=22,
+                color="white"
+            )
+        ),
+
+        template="plotly_dark",
+
+        height=520,
+
+        margin=dict(
+            l=70,
+            r=30,
+            t=90,
+            b=100
+        ),
+
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.20,
+            xanchor="center",
+            x=0.5,
+            font=dict(
+                color="white"
+            )
+        ),
+
+        font=dict(
+            color="white"
+        )
+    )
+
+    fig.update_xaxes(
+        title_text="Financial Year",
+        tickfont=dict(color="white"),
+        title_font=dict(color="white")
+    )
+
+    fig.update_yaxes(
+        title_text="Employee Count",
+        rangemode="tozero",
+        tickfont=dict(color="white"),
+        title_font=dict(color="white"),
+        gridcolor="rgba(255,255,255,0.15)"
+    )
+
+    return fig
+
+
+# ============================================================
+# FUNCTION — RENDER CHART
+# ============================================================
+
+def render_chart(chart_data):
+
+    if not chart_data:
+        return
+
+    if not chart_data.get("chart_required", False):
+        return
+
+    chart_type = (
+        chart_data.get("chart_type", "bar")
+        .lower()
+        .strip()
+    )
+
+    # --------------------------------------------------------
+    # BAR
+    # --------------------------------------------------------
+
+    if chart_type == "bar":
+
+        fig = create_bar_chart(chart_data)
+
+        if fig:
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        return
+
+    # --------------------------------------------------------
+    # LINE
+    # --------------------------------------------------------
+
+    if chart_type == "line":
+
+        fig = create_line_chart(chart_data)
+
+        if fig:
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        return
+
+    # --------------------------------------------------------
+    # UNKNOWN CHART TYPE
+    # --------------------------------------------------------
+
+    st.warning(
+        f"Unsupported chart type: {chart_type}"
+    )
+
+
+# ============================================================
+# MAIN ANALYSIS
+# ============================================================
+
+if analyze:
 
     if not question.strip():
-        st.warning("Please enter a People Analytics question.")
-        st.stop()
-
-    # --------------------------------------------------------
-    # CALL N8N WORKFLOW
-    # --------------------------------------------------------
-
-    with st.spinner("Analyzing workforce data..."):
-
-        try:
-            response = requests.post(
-                WEBHOOK_URL,
-                json={
-                    "user_question": question.strip()
-                },
-                timeout=120
-            )
-
-            response.raise_for_status()
-
-            result = response.json()
-
-        except requests.exceptions.Timeout:
-            st.error(
-                "The analytics workflow took too long to respond."
-            )
-            st.stop()
-
-        except requests.exceptions.RequestException as e:
-            st.error(
-                f"Unable to connect to the analytics workflow: {e}"
-            )
-            st.stop()
-
-        except ValueError:
-            st.error(
-                "The analytics workflow returned an invalid response."
-            )
-            st.stop()
-
-
-    # ========================================================
-    # NORMALIZE RESPONSE
-    # ========================================================
-
-    # n8n should normally return an object.
-    # This also protects us if the response is wrapped in a list.
-
-    if isinstance(result, list):
-
-        if len(result) == 0:
-            st.error("The analytics workflow returned no data.")
-            st.stop()
-
-        result = result[0]
-
-    if not isinstance(result, dict):
-        st.error("Unexpected response format from the analytics workflow.")
-        st.stop()
-
-
-    # ========================================================
-    # ANALYSIS / TEXT ANSWER
-    # ========================================================
-
-    answer = result.get("answer", "")
-
-    if answer:
-
-        st.subheader("Analysis")
-
-        st.write(answer)
-
-
-    # ========================================================
-    # CHART DECISION
-    # ========================================================
-
-    chart_required = result.get(
-        "chart_required",
-        False
-    )
-
-    if not chart_required:
-        st.stop()
-
-
-    # ========================================================
-    # CHART DATA
-    # ========================================================
-
-    chart_type = str(
-        result.get("chart_type", "bar")
-    ).strip().lower()
-
-    chart_title = str(
-        result.get("chart_title", "")
-    ).strip()
-
-    labels = result.get(
-        "chart_labels",
-        []
-    )
-
-    datasets = result.get(
-        "chart_datasets",
-        []
-    )
-
-
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
-
-    if not isinstance(labels, list) or not labels:
 
         st.warning(
-            "Chart labels were not returned by the analytics workflow."
+            "Please enter a People Analytics question."
         )
-        st.stop()
-
-
-    if not isinstance(datasets, list) or not datasets:
-
-        st.warning(
-            "Chart datasets were not returned by the analytics workflow."
-        )
-        st.stop()
-
-
-    # ========================================================
-    # BAR / COLUMN CHART
-    # ========================================================
-
-    if chart_type in [
-        "bar",
-        "column",
-        "groupedBar",
-        "grouped_bar"
-    ]:
-
-        chart_rows = []
-
-
-        # ----------------------------------------------------
-        # CONVERT N8N DATA INTO LONG-FORM DATA
-        # ----------------------------------------------------
-
-        for dataset in datasets:
-
-            if not isinstance(dataset, dict):
-                continue
-
-            metric = str(
-                dataset.get("label", "Value")
-            )
-
-            values = dataset.get(
-                "data",
-                []
-            )
-
-            if not isinstance(values, list):
-                continue
-
-
-            for index, financial_year in enumerate(labels):
-
-                value = (
-                    values[index]
-                    if index < len(values)
-                    else 0
-                )
-
-                # Ensure numeric values
-                try:
-                    numeric_value = float(value)
-                except (TypeError, ValueError):
-                    numeric_value = 0
-
-
-                chart_rows.append(
-                    {
-                        "FY": str(financial_year),
-                        "Metric": metric,
-                        "Value": numeric_value
-                    }
-                )
-
-
-        # ----------------------------------------------------
-        # CHECK CHART DATA
-        # ----------------------------------------------------
-
-        if not chart_rows:
-
-            st.warning(
-                "No usable chart data was returned."
-            )
-            st.stop()
-
-
-        df = pd.DataFrame(chart_rows)
-
-
-        # ----------------------------------------------------
-        # PRESERVE THE ORDER RETURNED BY N8N
-        # ----------------------------------------------------
-
-        fy_order = [
-            str(label)
-            for label in labels
-        ]
-
-        metric_order = []
-
-        for dataset in datasets:
-
-            metric = str(
-                dataset.get("label", "Value")
-            )
-
-            if metric not in metric_order:
-                metric_order.append(metric)
-
-
-        df["FY"] = pd.Categorical(
-            df["FY"],
-            categories=fy_order,
-            ordered=True
-        )
-
-        df["Metric"] = pd.Categorical(
-            df["Metric"],
-            categories=metric_order,
-            ordered=True
-        )
-
-
-        # ----------------------------------------------------
-        # CHART TITLE
-        # ----------------------------------------------------
-
-        if chart_title:
-            st.subheader(chart_title)
-
-
-        # ----------------------------------------------------
-        # COLOUR PALETTE
-        #
-        # New Joiners and Exits will always be visually
-        # different, even if n8n sends the same colour.
-        # ----------------------------------------------------
-
-        default_colors = [
-            "#4472C4",
-            "#ED7D31",
-            "#70AD47",
-            "#5B9BD5",
-            "#A5A5A5",
-            "#FFC000",
-            "#8064A2",
-            "#00A6A6"
-        ]
-
-
-        # ----------------------------------------------------
-        # USE COLORS FROM N8N WHEN AVAILABLE
-        # ----------------------------------------------------
-
-        color_map = {}
-
-        for index, dataset in enumerate(datasets):
-
-            metric = str(
-                dataset.get("label", "Value")
-            )
-
-            supplied_color = dataset.get(
-                "backgroundColor"
-            )
-
-            if (
-                isinstance(supplied_color, str)
-                and supplied_color.startswith("#")
-            ):
-                color_map[metric] = supplied_color
-
-            else:
-                color_map[metric] = (
-                    default_colors[
-                        index % len(default_colors)
-                    ]
-                )
-
-
-        # ----------------------------------------------------
-        # GROUPED BAR CHART
-        # ----------------------------------------------------
-
-        bars = (
-            alt.Chart(df)
-            .mark_bar(
-                size=45
-            )
-            .encode(
-
-                # Financial years are the main X-axis groups
-                x=alt.X(
-                    "FY:N",
-                    title=None,
-                    sort=fy_order,
-                    axis=alt.Axis(
-                        labelAngle=0,
-                        labelFontSize=14,
-                        labelPadding=12,
-                        ticks=True,
-                        domain=True
-                    )
-                ),
-
-                # This is the critical part:
-                # xOffset creates SIDE-BY-SIDE bars
-                # instead of stacked bars.
-                xOffset=alt.XOffset(
-                    "Metric:N",
-                    sort=metric_order
-                ),
-
-                # Employee count
-                y=alt.Y(
-                    "Value:Q",
-                    title="Employee Count",
-                    scale=alt.Scale(
-                        zero=True
-                    ),
-                    axis=alt.Axis(
-                        labelFontSize=12,
-                        titleFontSize=14,
-                        tickMinStep=1
-                    )
-                ),
-
-                # Different colour for every metric
-                color=alt.Color(
-                    "Metric:N",
-                    title=None,
-                    sort=metric_order,
-                    scale=alt.Scale(
-                        domain=list(color_map.keys()),
-                        range=list(color_map.values())
-                    ),
-                    legend=alt.Legend(
-                        orient="bottom",
-                        labelFontSize=13,
-                        symbolSize=120,
-                        title=None
-                    )
-                ),
-
-                tooltip=[
-                    alt.Tooltip(
-                        "FY:N",
-                        title="Financial Year"
-                    ),
-                    alt.Tooltip(
-                        "Metric:N",
-                        title="Metric"
-                    ),
-                    alt.Tooltip(
-                        "Value:Q",
-                        title="Employee Count",
-                        format=".0f"
-                    )
-                ]
-            )
-            .properties(
-                height=500
-            )
-        )
-
-
-        # ----------------------------------------------------
-        # VALUE LABELS ABOVE EACH BAR
-        # ----------------------------------------------------
-
-        value_labels = (
-            alt.Chart(df)
-            .mark_text(
-                dy=-8,
-                fontSize=13,
-                fontWeight="bold"
-            )
-            .encode(
-
-                x=alt.X(
-                    "FY:N",
-                    sort=fy_order
-                ),
-
-                xOffset=alt.XOffset(
-                    "Metric:N",
-                    sort=metric_order
-                ),
-
-                y=alt.Y(
-                    "Value:Q"
-                ),
-
-                text=alt.Text(
-                    "Value:Q",
-                    format=".0f"
-                )
-            )
-        )
-
-
-        # ----------------------------------------------------
-        # DISPLAY CHART
-        # ----------------------------------------------------
-
-        st.altair_chart(
-            bars + value_labels,
-            use_container_width=True
-        )
-
-
-    # ========================================================
-    # LINE CHART
-    # ========================================================
-
-    elif chart_type == "line":
-
-        chart_rows = []
-
-        for dataset in datasets:
-
-            if not isinstance(dataset, dict):
-                continue
-
-            metric = str(
-                dataset.get("label", "Value")
-            )
-
-            values = dataset.get(
-                "data",
-                []
-            )
-
-            for index, label in enumerate(labels):
-
-                value = (
-                    values[index]
-                    if index < len(values)
-                    else 0
-                )
-
-                try:
-                    value = float(value)
-                except (TypeError, ValueError):
-                    value = 0
-
-                chart_rows.append(
-                    {
-                        "Period": str(label),
-                        "Metric": metric,
-                        "Value": value
-                    }
-                )
-
-
-        df = pd.DataFrame(chart_rows)
-
-
-        if chart_title:
-            st.subheader(chart_title)
-
-
-        line_chart = (
-            alt.Chart(df)
-            .mark_line(
-                point=True
-            )
-            .encode(
-                x=alt.X(
-                    "Period:N",
-                    title=None,
-                    axis=alt.Axis(
-                        labelAngle=0,
-                        labelFontSize=14
-                    )
-                ),
-                y=alt.Y(
-                    "Value:Q",
-                    title="Value"
-                ),
-                color=alt.Color(
-                    "Metric:N",
-                    title=None
-                ),
-                tooltip=[
-                    "Period",
-                    "Metric",
-                    "Value"
-                ]
-            )
-            .properties(
-                height=500
-            )
-        )
-
-
-        st.altair_chart(
-            line_chart,
-            use_container_width=True
-        )
-
-
-    # ========================================================
-    # PIE / POLAR AREA
-    # ========================================================
-
-    elif chart_type in [
-        "pie",
-        "doughnut",
-        "polarArea"
-    ]:
-
-        dataset = datasets[0]
-
-        values = dataset.get(
-            "data",
-            []
-        )
-
-        pie_rows = []
-
-        for index, label in enumerate(labels):
-
-            value = (
-                values[index]
-                if index < len(values)
-                else 0
-            )
-
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                value = 0
-
-            pie_rows.append(
-                {
-                    "Category": str(label),
-                    "Value": value
-                }
-            )
-
-
-        df = pd.DataFrame(pie_rows)
-
-
-        if chart_title:
-            st.subheader(chart_title)
-
-
-        pie_chart = (
-            alt.Chart(df)
-            .mark_arc(
-                innerRadius=70
-                if chart_type == "doughnut"
-                else 0
-            )
-            .encode(
-                theta=alt.Theta(
-                    "Value:Q"
-                ),
-                color=alt.Color(
-                    "Category:N",
-                    title=None
-                ),
-                tooltip=[
-                    alt.Tooltip(
-                        "Category:N",
-                        title="Category"
-                    ),
-                    alt.Tooltip(
-                        "Value:Q",
-                        title="Employee Count",
-                        format=".0f"
-                    )
-                ]
-            )
-            .properties(
-                height=500
-            )
-        )
-
-
-        st.altair_chart(
-            pie_chart,
-            use_container_width=True
-        )
-
-
-    # ========================================================
-    # UNKNOWN CHART TYPE
-    # ========================================================
 
     else:
 
-        st.warning(
-            f"Chart type '{chart_type}' is not currently supported."
-        )
+        with st.spinner("Analyzing workforce data..."):
 
-        # Show the returned data so the issue can be diagnosed
-        # without breaking the entire dashboard.
+            result = call_n8n(
+                question.strip()
+            )
 
-        st.json(
-            {
-                "chart_type": chart_type,
-                "chart_title": chart_title,
-                "chart_labels": labels,
-                "chart_datasets": datasets
-            }
-        )
+        if result:
+
+            # =================================================
+            # ANALYSIS SECTION
+            # =================================================
+
+            answer = result.get(
+                "answer",
+                "No analysis was returned."
+            )
+
+            st.markdown(
+                '<div class="section-title">Analysis</div>',
+                unsafe_allow_html=True
+            )
+
+            st.markdown(
+                f'<div class="analysis-text">{answer}</div>',
+                unsafe_allow_html=True
+            )
+
+            # =================================================
+            # CHART SECTION
+            # =================================================
+
+            if result.get(
+                "chart_required",
+                False
+            ):
+
+                render_chart(result)
