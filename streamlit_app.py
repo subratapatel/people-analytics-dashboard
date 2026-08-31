@@ -1,11 +1,8 @@
 import streamlit as st
 import requests
-import pandas as pd
-import plotly.express as px
 
 # ============================================================
 # PEOPLE ANALYTICS DASHBOARD
-# Connected to n8n People Analytics Workflow
 # ============================================================
 
 WEBHOOK_URL = "https://n8n.umirai.ai/webhook/people-analytics"
@@ -15,7 +12,7 @@ WEBHOOK_URL = "https://n8n.umirai.ai/webhook/people-analytics"
 # ------------------------------------------------------------
 
 st.set_page_config(
-    page_title="People Analytics",
+    page_title="People Analytics Dashboard",
     page_icon="📊",
     layout="wide"
 )
@@ -25,15 +22,15 @@ st.set_page_config(
 # ------------------------------------------------------------
 
 st.title("People Analytics Dashboard")
-st.caption("Ask questions about your workforce data")
+st.caption("Workforce insights powered by your People Analytics workflow")
 
 # ------------------------------------------------------------
-# QUESTION INPUT
+# QUESTION
 # ------------------------------------------------------------
 
 question = st.text_input(
     "Ask a People Analytics question",
-    placeholder="e.g. Compare new joiners and exits between FY 2023-24 and FY 2025-26"
+    placeholder="Example: Compare new joiners and exits between FY 2023-24 and FY 2025-26"
 )
 
 # ------------------------------------------------------------
@@ -49,7 +46,6 @@ if st.button("Analyze", type="primary"):
     with st.spinner("Analyzing workforce data..."):
 
         try:
-
             response = requests.post(
                 WEBHOOK_URL,
                 json={
@@ -59,11 +55,9 @@ if st.button("Analyze", type="primary"):
             )
 
             response.raise_for_status()
-
             result = response.json()
 
         except Exception as e:
-
             st.error(f"Unable to connect to the analytics workflow: {e}")
             st.stop()
 
@@ -78,243 +72,194 @@ if st.button("Analyze", type="primary"):
         st.write(answer)
 
     # --------------------------------------------------------
-    # CHART
+    # CHART DATA
     # --------------------------------------------------------
 
     chart_required = result.get("chart_required", False)
 
-    if chart_required:
+    if not chart_required:
+        st.info("No chart required for this question.")
+        st.stop()
 
-        chart_type = result.get("chart_type", "bar")
-        chart_title = result.get("chart_title", "")
-        labels = result.get("chart_labels", [])
-        datasets = result.get("chart_datasets", [])
+    chart_type = result.get("chart_type", "bar")
+    chart_title = result.get("chart_title", "")
+    labels = result.get("chart_labels", [])
+    datasets = result.get("chart_datasets", [])
 
-        if labels and datasets:
+    if not labels or not datasets:
+        st.warning("Chart was requested but no chart data was returned.")
+        st.stop()
 
-            # ------------------------------------------------
-            # CONVERT DATA TO DATAFRAME
-            # ------------------------------------------------
+    # --------------------------------------------------------
+    # CHART TITLE
+    # --------------------------------------------------------
 
-            chart_data = {}
+    if chart_title:
+        st.subheader(chart_title)
+
+    # --------------------------------------------------------
+    # BAR CHART
+    # --------------------------------------------------------
+
+    if chart_type == "bar":
+
+        chart_data = {}
+
+        for dataset in datasets:
+            label = dataset.get("label", "Value")
+            values = dataset.get("data", [])
+
+            chart_data[label] = values
+
+        chart_data["Category"] = labels
+
+        # Streamlit native bar chart expects categories as index
+        chart_rows = []
+
+        for i, category in enumerate(labels):
+
+            row = {
+                "Category": category
+            }
 
             for dataset in datasets:
 
-                dataset_label = dataset.get("label", "Value")
-                dataset_values = dataset.get("data", [])
-
-                chart_data[dataset_label] = dataset_values
-
-            chart_data["Category"] = labels
-
-            df = pd.DataFrame(chart_data)
-
-            # ------------------------------------------------
-            # BAR
-            # ------------------------------------------------
-
-            if chart_type == "bar":
-
-                df_long = df.melt(
-                    id_vars="Category",
-                    var_name="Metric",
-                    value_name="Value"
-                )
-
-                fig = px.bar(
-                    df_long,
-                    x="Category",
-                    y="Value",
-                    color="Metric",
-                    barmode="group",
-                    title=chart_title,
-                    text="Value"
-                )
-
-                fig.update_traces(
-                    textposition="outside"
-                )
-
-                fig.update_layout(
-                    title_font_size=22,
-                    xaxis_title="",
-                    yaxis_title="Count",
-                    font=dict(
-                        size=16,
-                        color="black"
-                    ),
-                    legend_title="",
-                    height=500
-                )
-
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
-
-            # ------------------------------------------------
-            # LINE
-            # ------------------------------------------------
-
-            elif chart_type == "line":
-
-                df_long = df.melt(
-                    id_vars="Category",
-                    var_name="Metric",
-                    value_name="Value"
-                )
-
-                fig = px.line(
-                    df_long,
-                    x="Category",
-                    y="Value",
-                    color="Metric",
-                    markers=True,
-                    title=chart_title,
-                    text="Value"
-                )
-
-                fig.update_traces(
-                    textposition="top center"
-                )
-
-                fig.update_layout(
-                    title_font_size=22,
-                    xaxis_title="",
-                    yaxis_title="Value",
-                    font=dict(
-                        size=16,
-                        color="black"
-                    ),
-                    height=500
-                )
-
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
-
-            # ------------------------------------------------
-            # PIE / POLAR AREA
-            # ------------------------------------------------
-
-            elif chart_type in ["pie", "polarArea"]:
-
-                dataset = datasets[0]
-
+                label = dataset.get("label", "Value")
                 values = dataset.get("data", [])
 
-                pie_df = pd.DataFrame({
-                    "Category": labels,
-                    "Value": values
-                })
+                if i < len(values):
+                    row[label] = values[i]
+                else:
+                    row[label] = 0
 
-                fig = px.pie(
-                    pie_df,
-                    names="Category",
-                    values="Value",
-                    title=chart_title
-                )
+            chart_rows.append(row)
 
-                fig.update_layout(
-                    title_font_size=22,
-                    font=dict(
-                        size=16,
-                        color="black"
-                    ),
-                    height=500
-                )
+        # Build simple table-like structure without pandas
+        categories = [row["Category"] for row in chart_rows]
 
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
+        chart_columns = {}
 
-            # ------------------------------------------------
-            # DOUGHNUT
-            # ------------------------------------------------
+        for dataset in datasets:
 
-            elif chart_type == "doughnut":
+            label = dataset.get("label", "Value")
+            values = dataset.get("data", [])
 
-                dataset = datasets[0]
+            chart_columns[label] = values
 
+        st.bar_chart(
+            chart_columns,
+            x=None,
+            y=None,
+            height=500
+        )
+
+        # Show exact values below chart
+        with st.expander("View chart values"):
+
+            for dataset in datasets:
+
+                label = dataset.get("label", "Value")
                 values = dataset.get("data", [])
 
-                pie_df = pd.DataFrame({
-                    "Category": labels,
-                    "Value": values
-                })
+                st.write(f"**{label}**")
 
-                fig = px.pie(
-                    pie_df,
-                    names="Category",
-                    values="Value",
-                    hole=0.5,
-                    title=chart_title
-                )
+                for i, category in enumerate(labels):
 
-                fig.update_layout(
-                    title_font_size=22,
-                    font=dict(
-                        size=16,
-                        color="black"
-                    ),
-                    height=500
-                )
-
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
-
-            # ------------------------------------------------
-            # FALLBACK
-            # ------------------------------------------------
-
-            else:
-
-                df_long = df.melt(
-                    id_vars="Category",
-                    var_name="Metric",
-                    value_name="Value"
-                )
-
-                fig = px.bar(
-                    df_long,
-                    x="Category",
-                    y="Value",
-                    color="Metric",
-                    barmode="group",
-                    title=chart_title,
-                    text="Value"
-                )
-
-                fig.update_layout(
-                    title_font_size=22,
-                    font=dict(
-                        size=16,
-                        color="black"
-                    ),
-                    height=500
-                )
-
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
+                    if i < len(values):
+                        st.write(
+                            f"{category}: **{values[i]}**"
+                        )
 
     # --------------------------------------------------------
-    # RAW DATA — OPTIONAL DEBUG
+    # LINE CHART
     # --------------------------------------------------------
 
-    with st.expander("View chart data"):
+    elif chart_type == "line":
 
-        if chart_required:
-            st.json({
-                "chart_type": result.get("chart_type"),
-                "chart_title": result.get("chart_title"),
-                "chart_labels": result.get("chart_labels"),
-                "chart_datasets": result.get("chart_datasets")
-            })
-        else:
-            st.write("No chart was requested for this question.")
+        chart_data = {}
+
+        for dataset in datasets:
+
+            label = dataset.get("label", "Value")
+            values = dataset.get("data", [])
+
+            chart_data[label] = values
+
+        st.line_chart(
+            chart_data,
+            height=500
+        )
+
+        with st.expander("View chart values"):
+
+            for dataset in datasets:
+
+                label = dataset.get("label", "Value")
+                values = dataset.get("data", [])
+
+                st.write(f"**{label}**")
+
+                for i, category in enumerate(labels):
+
+                    if i < len(values):
+                        st.write(
+                            f"{category}: **{values[i]}**"
+                        )
+
+    # --------------------------------------------------------
+    # PIE / POLAR AREA
+    # --------------------------------------------------------
+
+    elif chart_type in ["pie", "polarArea", "doughnut"]:
+
+        st.bar_chart(
+            {
+                dataset.get("label", "Value"): dataset.get("data", [])
+                for dataset in datasets
+            },
+            height=500
+        )
+
+        st.caption(
+            "Category distribution"
+        )
+
+        with st.expander("View chart values"):
+
+            for dataset in datasets:
+
+                label = dataset.get("label", "Value")
+                values = dataset.get("data", [])
+
+                st.write(f"**{label}**")
+
+                for i, category in enumerate(labels):
+
+                    if i < len(values):
+                        st.write(
+                            f"{category}: **{values[i]}**"
+                        )
+
+    # --------------------------------------------------------
+    # FALLBACK
+    # --------------------------------------------------------
+
+    else:
+
+        st.bar_chart(
+            {
+                dataset.get("label", "Value"): dataset.get("data", [])
+                for dataset in datasets
+            },
+            height=500
+        )
+
+# ------------------------------------------------------------
+# FOOTER
+# ------------------------------------------------------------
+
+st.divider()
+
+st.caption(
+    "People Analytics Decision Intelligence"
+)
