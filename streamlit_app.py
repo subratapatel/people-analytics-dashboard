@@ -1,15 +1,12 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 # ============================================================
-# PEOPLE ANALYTICS DASHBOARD
+# CONFIGURATION
 # ============================================================
 
 WEBHOOK_URL = "https://n8n.umirai.ai/webhook/people-analytics"
-
-# ------------------------------------------------------------
-# PAGE CONFIG
-# ------------------------------------------------------------
 
 st.set_page_config(
     page_title="People Analytics Dashboard",
@@ -17,25 +14,25 @@ st.set_page_config(
     layout="wide"
 )
 
-# ------------------------------------------------------------
+# ============================================================
 # HEADER
-# ------------------------------------------------------------
+# ============================================================
 
 st.title("People Analytics Dashboard")
-st.caption("Workforce insights powered by your People Analytics workflow")
+st.caption("Workforce insights powered by People Analytics")
 
-# ------------------------------------------------------------
+# ============================================================
 # QUESTION
-# ------------------------------------------------------------
+# ============================================================
 
 question = st.text_input(
     "Ask a People Analytics question",
     placeholder="Example: Compare new joiners and exits between FY 2023-24 and FY 2025-26"
 )
 
-# ------------------------------------------------------------
+# ============================================================
 # ANALYZE
-# ------------------------------------------------------------
+# ============================================================
 
 if st.button("Analyze", type="primary"):
 
@@ -58,12 +55,12 @@ if st.button("Analyze", type="primary"):
             result = response.json()
 
         except Exception as e:
-            st.error(f"Unable to connect to the analytics workflow: {e}")
+            st.error(f"Unable to connect to analytics workflow: {e}")
             st.stop()
 
-    # --------------------------------------------------------
+    # ========================================================
     # ANSWER
-    # --------------------------------------------------------
+    # ========================================================
 
     answer = result.get("answer", "")
 
@@ -71,195 +68,199 @@ if st.button("Analyze", type="primary"):
         st.subheader("Analysis")
         st.write(answer)
 
-    # --------------------------------------------------------
-    # CHART DATA
-    # --------------------------------------------------------
+    # ========================================================
+    # CHART
+    # ========================================================
 
-    chart_required = result.get("chart_required", False)
+    if result.get("chart_required", False):
 
-    if not chart_required:
-        st.info("No chart required for this question.")
-        st.stop()
+        chart_type = result.get("chart_type", "bar")
+        chart_title = result.get("chart_title", "")
+        labels = result.get("chart_labels", [])
+        datasets = result.get("chart_datasets", [])
 
-    chart_type = result.get("chart_type", "bar")
-    chart_title = result.get("chart_title", "")
-    labels = result.get("chart_labels", [])
-    datasets = result.get("chart_datasets", [])
+        if not labels or not datasets:
+            st.warning("Chart data was not returned.")
+            st.stop()
 
-    if not labels or not datasets:
-        st.warning("Chart was requested but no chart data was returned.")
-        st.stop()
+        # ----------------------------------------------------
+        # BAR CHART
+        # ----------------------------------------------------
 
-    # --------------------------------------------------------
-    # CHART TITLE
-    # --------------------------------------------------------
+        if chart_type == "bar":
 
-    if chart_title:
-        st.subheader(chart_title)
+            chart_rows = []
 
-    # --------------------------------------------------------
-    # BAR CHART
-    # --------------------------------------------------------
+            for i, label in enumerate(labels):
 
-    if chart_type == "bar":
+                row = {
+                    "FY": label
+                }
 
-        chart_data = {}
+                for dataset in datasets:
 
-        for dataset in datasets:
-            label = dataset.get("label", "Value")
-            values = dataset.get("data", [])
+                    dataset_label = dataset.get(
+                        "label",
+                        "Value"
+                    )
 
-            chart_data[label] = values
+                    values = dataset.get(
+                        "data",
+                        []
+                    )
 
-        chart_data["Category"] = labels
+                    row[dataset_label] = (
+                        values[i]
+                        if i < len(values)
+                        else 0
+                    )
 
-        # Streamlit native bar chart expects categories as index
-        chart_rows = []
+                chart_rows.append(row)
 
-        for i, category in enumerate(labels):
+            df = pd.DataFrame(chart_rows)
 
-            row = {
-                "Category": category
+            # Keep FY as the index so FY labels appear
+            # directly underneath the grouped bars.
+            df = df.set_index("FY")
+
+            # ------------------------------------------------
+            # CHART TITLE
+            # ------------------------------------------------
+
+            if chart_title:
+                st.subheader(chart_title)
+
+            # ------------------------------------------------
+            # GROUPED BAR CHART
+            # ------------------------------------------------
+
+            st.bar_chart(
+                df,
+                height=500
+            )
+
+            # ------------------------------------------------
+            # VALUE DISPLAY
+            # ------------------------------------------------
+
+            st.markdown("### Values")
+
+            st.dataframe(
+                df,
+                use_container_width=True
+            )
+
+        # ----------------------------------------------------
+        # LINE CHART
+        # ----------------------------------------------------
+
+        elif chart_type == "line":
+
+            chart_rows = []
+
+            for i, label in enumerate(labels):
+
+                row = {
+                    "Period": label
+                }
+
+                for dataset in datasets:
+
+                    dataset_label = dataset.get(
+                        "label",
+                        "Value"
+                    )
+
+                    values = dataset.get(
+                        "data",
+                        []
+                    )
+
+                    row[dataset_label] = (
+                        values[i]
+                        if i < len(values)
+                        else 0
+                    )
+
+                chart_rows.append(row)
+
+            df = pd.DataFrame(chart_rows)
+            df = df.set_index("Period")
+
+            if chart_title:
+                st.subheader(chart_title)
+
+            st.line_chart(
+                df,
+                height=500
+            )
+
+        # ----------------------------------------------------
+        # PIE / DOUGHNUT
+        # ----------------------------------------------------
+
+        elif chart_type in ["pie", "doughnut"]:
+
+            dataset = datasets[0]
+
+            values = dataset.get(
+                "data",
+                []
+            )
+
+            pie_data = {
+                labels[i]: values[i]
+                for i in range(
+                    min(len(labels), len(values))
+                )
             }
 
-            for dataset in datasets:
+            st.subheader(
+                chart_title
+                if chart_title
+                else "Distribution"
+            )
 
-                label = dataset.get("label", "Value")
-                values = dataset.get("data", [])
+            st.write(pie_data)
 
-                if i < len(values):
-                    row[label] = values[i]
-                else:
-                    row[label] = 0
+        # ----------------------------------------------------
+        # FALLBACK
+        # ----------------------------------------------------
 
-            chart_rows.append(row)
+        else:
 
-        # Build simple table-like structure without pandas
-        categories = [row["Category"] for row in chart_rows]
+            chart_rows = []
 
-        chart_columns = {}
+            for i, label in enumerate(labels):
 
-        for dataset in datasets:
+                row = {
+                    "Category": label
+                }
 
-            label = dataset.get("label", "Value")
-            values = dataset.get("data", [])
+                for dataset in datasets:
 
-            chart_columns[label] = values
+                    dataset_label = dataset.get(
+                        "label",
+                        "Value"
+                    )
 
-        st.bar_chart(
-            chart_columns,
-            x=None,
-            y=None,
-            height=500
-        )
+                    values = dataset.get(
+                        "data",
+                        []
+                    )
 
-        # Show exact values below chart
-        with st.expander("View chart values"):
+                    row[dataset_label] = (
+                        values[i]
+                        if i < len(values)
+                        else 0
+                    )
 
-            for dataset in datasets:
+                chart_rows.append(row)
 
-                label = dataset.get("label", "Value")
-                values = dataset.get("data", [])
+            df = pd.DataFrame(chart_rows)
+            df = df.set_index("Category")
 
-                st.write(f"**{label}**")
-
-                for i, category in enumerate(labels):
-
-                    if i < len(values):
-                        st.write(
-                            f"{category}: **{values[i]}**"
-                        )
-
-    # --------------------------------------------------------
-    # LINE CHART
-    # --------------------------------------------------------
-
-    elif chart_type == "line":
-
-        chart_data = {}
-
-        for dataset in datasets:
-
-            label = dataset.get("label", "Value")
-            values = dataset.get("data", [])
-
-            chart_data[label] = values
-
-        st.line_chart(
-            chart_data,
-            height=500
-        )
-
-        with st.expander("View chart values"):
-
-            for dataset in datasets:
-
-                label = dataset.get("label", "Value")
-                values = dataset.get("data", [])
-
-                st.write(f"**{label}**")
-
-                for i, category in enumerate(labels):
-
-                    if i < len(values):
-                        st.write(
-                            f"{category}: **{values[i]}**"
-                        )
-
-    # --------------------------------------------------------
-    # PIE / POLAR AREA
-    # --------------------------------------------------------
-
-    elif chart_type in ["pie", "polarArea", "doughnut"]:
-
-        st.bar_chart(
-            {
-                dataset.get("label", "Value"): dataset.get("data", [])
-                for dataset in datasets
-            },
-            height=500
-        )
-
-        st.caption(
-            "Category distribution"
-        )
-
-        with st.expander("View chart values"):
-
-            for dataset in datasets:
-
-                label = dataset.get("label", "Value")
-                values = dataset.get("data", [])
-
-                st.write(f"**{label}**")
-
-                for i, category in enumerate(labels):
-
-                    if i < len(values):
-                        st.write(
-                            f"{category}: **{values[i]}**"
-                        )
-
-    # --------------------------------------------------------
-    # FALLBACK
-    # --------------------------------------------------------
-
-    else:
-
-        st.bar_chart(
-            {
-                dataset.get("label", "Value"): dataset.get("data", [])
-                for dataset in datasets
-            },
-            height=500
-        )
-
-# ------------------------------------------------------------
-# FOOTER
-# ------------------------------------------------------------
-
-st.divider()
-
-st.caption(
-    "People Analytics Decision Intelligence"
-)
+            st.bar_chart(
+                df,
+                height=500
+            )
