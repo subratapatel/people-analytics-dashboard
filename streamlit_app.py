@@ -274,7 +274,7 @@ def create_bar_chart(chart_data):
         ),
 
         # Space between FY groups
-        bargap=0.20,
+        bargap=0.40,
 
         # Small gap between New Joiners and Exits
         bargroupgap=0.01,
