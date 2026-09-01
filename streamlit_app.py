@@ -215,7 +215,7 @@ def create_bar_chart(chart_data):
                 ),
 
                 # Controlled bar width
-                width=0.30,
+                width=0.20,
 
                 # Prevent text from being clipped
                 cliponaxis=False,
