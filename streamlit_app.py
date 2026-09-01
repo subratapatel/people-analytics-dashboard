@@ -407,66 +407,54 @@ def create_bar_chart(chart_data):
     # X AXIS
     # ========================================================
 
-   # X AXIS
-# ========================================================
-
-# Determine X-axis title dynamically from chart data.
-# If n8n provides chart_x_axis_title, use it.
-# Otherwise infer it from the chart title.
-x_axis_title = chart_data.get("chart_x_axis_title")
-
-if not x_axis_title:
-    title_lower = str(chart_data.get("chart_title", "")).lower()
-
-    if "location" in title_lower:
-        x_axis_title = "Location"
-    elif "department" in title_lower:
-        x_axis_title = "Department"
-    elif "financial year" in title_lower or "financial years" in title_lower:
-        x_axis_title = "Financial Year"
-    elif "gender" in title_lower:
-        x_axis_title = "Gender"
-    elif "designation" in title_lower or "job title" in title_lower:
-        x_axis_title = "Designation"
-    elif "age" in title_lower:
-        x_axis_title = "Age"
-    elif "tenure" in title_lower:
-        x_axis_title = "Tenure"
-    else:
-        x_axis_title = "Category"
-
-fig.update_xaxes(
-    title_text=x_axis_title,
-
-    type="category",
-
-    categoryorder="array",
-
-    categoryarray=labels,
-
-    tickmode="array",
-
-    tickvals=labels,
-
-    ticktext=labels,
-
-    tickfont=dict(
-        color="#FFFFFF",
-        size=13
-    ),
-
-    title_font=dict(
-        color="#FFFFFF",
-        size=14
-    ),
-
-    showgrid=False,
-
-    zeroline=False
-)
+       # X AXIS
     # ========================================================
+
+    x_axis_title = chart_data.get("chart_x_axis_title")
+
+    if not x_axis_title:
+        title_lower = str(chart_data.get("chart_title", "")).lower()
+
+        if "location" in title_lower:
+            x_axis_title = "Location"
+        elif "department" in title_lower:
+            x_axis_title = "Department"
+        elif "financial year" in title_lower or "financial years" in title_lower:
+            x_axis_title = "Financial Year"
+        elif "gender" in title_lower:
+            x_axis_title = "Gender"
+        elif "designation" in title_lower or "job title" in title_lower:
+            x_axis_title = "Designation"
+        elif "age" in title_lower:
+            x_axis_title = "Age"
+        elif "tenure" in title_lower:
+            x_axis_title = "Tenure"
+        else:
+            x_axis_title = "Category"
+
+    fig.update_xaxes(
+        title_text=x_axis_title,
+        type="category",
+        categoryorder="array",
+        categoryarray=labels,
+        tickmode="array",
+        tickvals=labels,
+        ticktext=labels,
+        tickfont=dict(
+            color="#FFFFFF",
+            size=13
+        ),
+        title_font=dict(
+            color="#FFFFFF",
+            size=14
+        ),
+        showgrid=False,
+        zeroline=False
+    )
+    
+    # --------------------------------------------------------
     # Y AXIS
-    # ========================================================
+    # --------------------------------------------------------
 
     fig.update_yaxes(
 
@@ -474,28 +462,21 @@ fig.update_xaxes(
 
         rangemode="tozero",
 
-        range=[
-            0,
-            y_axis_max
-        ],
-
         tickfont=dict(
-            color="#FFFFFF",
+            color="white",
             size=12
         ),
 
         title_font=dict(
-            color="#FFFFFF",
+            color="white",
             size=14
         ),
 
         gridcolor="rgba(255,255,255,0.15)",
 
         zeroline=True,
-
         zerolinecolor="rgba(255,255,255,0.25)"
     )
-
     # ========================================================
     # FINAL TRACE-LEVEL TEXT OVERRIDE
     # ========================================================
