@@ -409,7 +409,7 @@ def create_bar_chart(chart_data):
 
     fig.update_xaxes(
 
-        title_text="Financial Year",
+        title_text=chart_data.get("chart_x_axis_title", "Category"),
 
         type="category",
 
