@@ -277,7 +277,7 @@ def create_bar_chart(chart_data):
         bargap=0.40,
 
         # Small gap between New Joiners and Exits
-        bargroupgap=0.04,
+        bargroupgap=0.02,
 
         # Legend
         legend=dict(
