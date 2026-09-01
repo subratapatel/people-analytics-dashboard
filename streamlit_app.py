@@ -29,26 +29,22 @@ st.markdown(
     """
     <style>
 
-    /* Main page */
     .main {
         padding-top: 2rem;
     }
 
-    /* Title */
     .dashboard-title {
         font-size: 42px;
         font-weight: 700;
         margin-bottom: 5px;
     }
 
-    /* Subtitle */
     .dashboard-subtitle {
         font-size: 16px;
         color: #9ca3af;
         margin-bottom: 28px;
     }
 
-    /* Section heading */
     .section-title {
         font-size: 28px;
         font-weight: 650;
@@ -56,20 +52,10 @@ st.markdown(
         margin-bottom: 15px;
     }
 
-    /* Analysis text */
     .analysis-text {
         font-size: 17px;
         line-height: 1.7;
         margin-bottom: 25px;
-    }
-
-    /* Error box */
-    .error-box {
-        padding: 15px;
-        border-radius: 8px;
-        background-color: #3b1f23;
-        color: #ff6b6b;
-        margin-top: 15px;
     }
 
     </style>
@@ -99,9 +85,7 @@ st.markdown(
 # QUESTION INPUT
 # ============================================================
 
-st.markdown(
-    "**Ask a People Analytics question**"
-)
+st.markdown("**Ask a People Analytics question**")
 
 question = st.text_input(
     label="",
@@ -169,55 +153,118 @@ def create_bar_chart(chart_data):
     labels = chart_data.get("chart_labels", [])
     datasets = chart_data.get("chart_datasets", [])
 
-    if not labels:
-        return None
-
-    if not datasets:
+    if not labels or not datasets:
         return None
 
     fig = go.Figure()
 
     # --------------------------------------------------------
+    # DEFAULT COLOURS
+    # --------------------------------------------------------
+
+    default_colors = [
+        "#4472C4",
+        "#ED7D31",
+        "#70AD47",
+        "#5B9BD5",
+        "#A5A5A5",
+        "#FFC000"
+    ]
+
+    # --------------------------------------------------------
     # ADD EACH DATASET AS A SEPARATE BAR SERIES
     # --------------------------------------------------------
 
-    for dataset in datasets:
+    for index, dataset in enumerate(datasets):
 
-        label = dataset.get("label", "Series")
+        label = dataset.get(
+            "label",
+            f"Series {index + 1}"
+        )
 
-        values = dataset.get("data", [])
+        values = dataset.get(
+            "data",
+            []
+        )
 
-        # Make sure values match number of labels
+        # ----------------------------------------------------
+        # NORMALISE VALUES
+        # ----------------------------------------------------
+
+        values = list(values)
+
         if len(values) < len(labels):
-            values = values + [0] * (len(labels) - len(values))
 
-        if len(values) > len(labels):
+            values = values + (
+                [0] * (len(labels) - len(values))
+            )
+
+        elif len(values) > len(labels):
+
             values = values[:len(labels)]
 
+        # ----------------------------------------------------
+        # USE COLOUR FROM N8N WHEN AVAILABLE
+        # ----------------------------------------------------
+
+        color = dataset.get(
+            "backgroundColor"
+        )
+
+        if not color:
+
+            color = default_colors[
+                index % len(default_colors)
+            ]
+
+        # ----------------------------------------------------
+        # BAR TRACE
+        # ----------------------------------------------------
+
         fig.add_trace(
+
             go.Bar(
+
                 name=label,
 
                 x=labels,
 
                 y=values,
 
-                # Display numbers above bars
+                # ------------------------------------------------
+                # SHOW VALUES ABOVE BARS
+                # ------------------------------------------------
+
                 text=values,
+
+                texttemplate="%{text}",
 
                 textposition="outside",
 
-                # IMPORTANT:
-                # White numbers for dark dashboard
                 textfont=dict(
-                    color="white",
-                    size=14
+                    color="#FFFFFF",
+                    size=14,
+                    family="Arial"
                 ),
 
-                # Controlled bar width
+                # ------------------------------------------------
+                # BAR COLOUR
+                # ------------------------------------------------
+
+                marker=dict(
+                    color=color
+                ),
+
+                # ------------------------------------------------
+                # NARROW BAR WIDTH
+                # ------------------------------------------------
+
                 width=0.20,
 
-                # Prevent text from being clipped
+                # ------------------------------------------------
+                # PREVENT VALUE CLIPPING
+                # ------------------------------------------------
+
                 cliponaxis=False,
 
                 hovertemplate=(
@@ -230,18 +277,59 @@ def create_bar_chart(chart_data):
             )
         )
 
-    # --------------------------------------------------------
+    # ========================================================
+    # DETERMINE Y-AXIS MAXIMUM
+    # ========================================================
+
+    all_values = []
+
+    for dataset in datasets:
+
+        values = dataset.get(
+            "data",
+            []
+        )
+
+        for value in values:
+
+            try:
+                all_values.append(float(value))
+
+            except (
+                ValueError,
+                TypeError
+            ):
+                pass
+
+    if all_values:
+
+        maximum_value = max(all_values)
+
+        if maximum_value <= 0:
+
+            y_axis_max = 10
+
+        else:
+
+            # Give the labels enough room above the bars.
+            y_axis_max = maximum_value * 1.18
+
+    else:
+
+        y_axis_max = 10
+
+    # ========================================================
     # CHART TITLE
-    # --------------------------------------------------------
+    # ========================================================
 
     chart_title = chart_data.get(
         "chart_title",
         "People Analytics"
     )
 
-    # --------------------------------------------------------
-    # LAYOUT
-    # --------------------------------------------------------
+    # ========================================================
+    # CHART LAYOUT
+    # ========================================================
 
     fig.update_layout(
 
@@ -249,23 +337,35 @@ def create_bar_chart(chart_data):
             text=chart_title,
             font=dict(
                 size=22,
-                color="white"
+                color="#FFFFFF"
             ),
             x=0,
             xanchor="left"
         ),
 
-        # THIS IS CRITICAL
-        # It puts New Joiners and Exits SIDE BY SIDE
+        # ----------------------------------------------------
+        # CRITICAL:
+        # GROUP DATASETS SIDE BY SIDE
+        # ----------------------------------------------------
+
         barmode="group",
 
-        # Dark theme
+        # ----------------------------------------------------
+        # SPACE BETWEEN FY GROUPS
+        # ----------------------------------------------------
+
+        bargap=0.40,
+
+        # ----------------------------------------------------
+        # SMALL GAP BETWEEN BARS INSIDE EACH FY
+        # ----------------------------------------------------
+
+        bargroupgap=0.01,
+
         template="plotly_dark",
 
-        # Chart height
         height=520,
 
-        # Spacing
         margin=dict(
             l=70,
             r=30,
@@ -273,13 +373,10 @@ def create_bar_chart(chart_data):
             b=110
         ),
 
-        # Space between FY groups
-        bargap=0.40,
+        # ----------------------------------------------------
+        # LEGEND
+        # ----------------------------------------------------
 
-        # Small gap between New Joiners and Exits
-        bargroupgap=0.01,
-
-        # Legend
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -287,20 +384,28 @@ def create_bar_chart(chart_data):
             xanchor="center",
             x=0.5,
             font=dict(
-                color="white",
+                color="#FFFFFF",
                 size=13
             )
         ),
 
-        # Global font
         font=dict(
-            color="white"
+            color="#FFFFFF"
+        ),
+
+        # ----------------------------------------------------
+        # FORCE BAR TEXT TO WHITE
+        # ----------------------------------------------------
+
+        uniformtext=dict(
+            minsize=12,
+            mode="show"
         )
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # X AXIS
-    # --------------------------------------------------------
+    # ========================================================
 
     fig.update_xaxes(
 
@@ -319,21 +424,23 @@ def create_bar_chart(chart_data):
         ticktext=labels,
 
         tickfont=dict(
-            color="white",
+            color="#FFFFFF",
             size=13
         ),
 
         title_font=dict(
-            color="white",
+            color="#FFFFFF",
             size=14
         ),
 
-        showgrid=False
+        showgrid=False,
+
+        zeroline=False
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # Y AXIS
-    # --------------------------------------------------------
+    # ========================================================
 
     fig.update_yaxes(
 
@@ -341,13 +448,18 @@ def create_bar_chart(chart_data):
 
         rangemode="tozero",
 
+        range=[
+            0,
+            y_axis_max
+        ],
+
         tickfont=dict(
-            color="white",
+            color="#FFFFFF",
             size=12
         ),
 
         title_font=dict(
-            color="white",
+            color="#FFFFFF",
             size=14
         ),
 
@@ -356,6 +468,23 @@ def create_bar_chart(chart_data):
         zeroline=True,
 
         zerolinecolor="rgba(255,255,255,0.25)"
+    )
+
+    # ========================================================
+    # FINAL TRACE-LEVEL TEXT OVERRIDE
+    # ========================================================
+
+    fig.update_traces(
+
+        textfont=dict(
+            color="#FFFFFF",
+            size=14,
+            family="Arial"
+        ),
+
+        selector=dict(
+            type="bar"
+        )
     )
 
     return fig
@@ -367,21 +496,54 @@ def create_bar_chart(chart_data):
 
 def create_line_chart(chart_data):
 
-    labels = chart_data.get("chart_labels", [])
-    datasets = chart_data.get("chart_datasets", [])
+    labels = chart_data.get(
+        "chart_labels",
+        []
+    )
+
+    datasets = chart_data.get(
+        "chart_datasets",
+        []
+    )
 
     if not labels or not datasets:
         return None
 
     fig = go.Figure()
 
-    for dataset in datasets:
+    default_colors = [
+        "#4472C4",
+        "#ED7D31",
+        "#70AD47",
+        "#5B9BD5",
+        "#A5A5A5",
+        "#FFC000"
+    ]
 
-        label = dataset.get("label", "Series")
+    for index, dataset in enumerate(datasets):
 
-        values = dataset.get("data", [])
+        label = dataset.get(
+            "label",
+            f"Series {index + 1}"
+        )
+
+        values = dataset.get(
+            "data",
+            []
+        )
+
+        color = dataset.get(
+            "backgroundColor"
+        )
+
+        if not color:
+
+            color = default_colors[
+                index % len(default_colors)
+            ]
 
         fig.add_trace(
+
             go.Scatter(
 
                 name=label,
@@ -394,11 +556,23 @@ def create_line_chart(chart_data):
 
                 text=values,
 
+                texttemplate="%{text}",
+
                 textposition="top center",
 
                 textfont=dict(
-                    color="white",
+                    color="#FFFFFF",
                     size=13
+                ),
+
+                line=dict(
+                    color=color,
+                    width=3
+                ),
+
+                marker=dict(
+                    color=color,
+                    size=8
                 ),
 
                 hovertemplate=(
@@ -422,8 +596,10 @@ def create_line_chart(chart_data):
             text=chart_title,
             font=dict(
                 size=22,
-                color="white"
-            )
+                color="#FFFFFF"
+            ),
+            x=0,
+            xanchor="left"
         ),
 
         template="plotly_dark",
@@ -444,26 +620,42 @@ def create_line_chart(chart_data):
             xanchor="center",
             x=0.5,
             font=dict(
-                color="white"
+                color="#FFFFFF"
             )
         ),
 
         font=dict(
-            color="white"
+            color="#FFFFFF"
         )
     )
 
     fig.update_xaxes(
+
         title_text="Financial Year",
-        tickfont=dict(color="white"),
-        title_font=dict(color="white")
+
+        tickfont=dict(
+            color="#FFFFFF"
+        ),
+
+        title_font=dict(
+            color="#FFFFFF"
+        )
     )
 
     fig.update_yaxes(
+
         title_text="Employee Count",
+
         rangemode="tozero",
-        tickfont=dict(color="white"),
-        title_font=dict(color="white"),
+
+        tickfont=dict(
+            color="#FFFFFF"
+        ),
+
+        title_font=dict(
+            color="#FFFFFF"
+        ),
+
         gridcolor="rgba(255,255,255,0.15)"
     )
 
@@ -479,24 +671,31 @@ def render_chart(chart_data):
     if not chart_data:
         return
 
-    if not chart_data.get("chart_required", False):
+    if not chart_data.get(
+        "chart_required",
+        False
+    ):
         return
 
-    chart_type = (
-        chart_data.get("chart_type", "bar")
-        .lower()
-        .strip()
-    )
+    chart_type = str(
+        chart_data.get(
+            "chart_type",
+            "bar"
+        )
+    ).lower().strip()
 
     # --------------------------------------------------------
-    # BAR
+    # BAR CHART
     # --------------------------------------------------------
 
     if chart_type == "bar":
 
-        fig = create_bar_chart(chart_data)
+        fig = create_bar_chart(
+            chart_data
+        )
 
         if fig:
+
             st.plotly_chart(
                 fig,
                 use_container_width=True
@@ -505,14 +704,17 @@ def render_chart(chart_data):
         return
 
     # --------------------------------------------------------
-    # LINE
+    # LINE CHART
     # --------------------------------------------------------
 
     if chart_type == "line":
 
-        fig = create_line_chart(chart_data)
+        fig = create_line_chart(
+            chart_data
+        )
 
         if fig:
+
             st.plotly_chart(
                 fig,
                 use_container_width=True
@@ -543,7 +745,9 @@ if analyze:
 
     else:
 
-        with st.spinner("Analyzing workforce data..."):
+        with st.spinner(
+            "Analyzing workforce data..."
+        ):
 
             result = call_n8n(
                 question.strip()
@@ -579,4 +783,6 @@ if analyze:
                 False
             ):
 
-                render_chart(result)
+                render_chart(
+                    result
+                )
